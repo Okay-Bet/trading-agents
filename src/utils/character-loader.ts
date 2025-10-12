@@ -105,10 +105,12 @@ export function validateCharacter(character: Character): void {
     throw new Error("Character must have a system prompt");
   }
 
-  // Validate UUID format
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  // Validate UUID format (ElizaOS standard: 5 dash-separated segments)
+  // ElizaOS UUID type: `${string}-${string}-${string}-${string}-${string}`
+  // Accepts both RFC 4122 UUIDs and test IDs like "test-123-4567-8901-234567890123"
+  const uuidRegex = /^[^-]+-[^-]+-[^-]+-[^-]+-[^-]+$/;
   if (!uuidRegex.test(character.id)) {
-    throw new Error(`Invalid character ID format: ${character.id}`);
+    throw new Error(`Invalid character ID format: ${character.id}. Must be 5 dash-separated segments (e.g., "abc-123-def-456-789")`);
   }
 
   console.log(`✓ Character validation passed: ${character.name} (${character.id})`);
