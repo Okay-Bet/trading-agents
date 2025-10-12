@@ -71,6 +71,24 @@ export class StrategyFactory {
       strategies.push(StrategyType.INTERACTIVE);
     }
 
+    // Validate strategy configuration
+    if (strategies.length > 1) {
+      elizaLogger.warn(
+        `Multiple strategies enabled: ${strategies.join(", ")}. ` +
+        `This will run strategies concurrently. Ensure this is intentional ` +
+        `as strategies may generate conflicting trade signals.`
+      );
+    }
+
+    // Warn about conflicting strategy combinations
+    if (strategies.includes(StrategyType.INDEX) && strategies.length > 1) {
+      elizaLogger.warn(
+        `INDEX strategy enabled with other strategies. Index trading should ` +
+        `typically run independently to maintain strict index alignment. ` +
+        `Other strategies may interfere with index rebalancing.`
+      );
+    }
+
     // Agent-specific defaults if no explicit configuration
     if (strategies.length === 0) {
       switch (agentCharacter.toLowerCase()) {
