@@ -68,5 +68,8 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-# Run the application
-CMD ["npm", "start"]
+# Run the application with automatic database initialization
+# The entrypoint script handles:
+# 1. Database initialization (runs setup-agent-db.mjs if needed)
+# 2. Starting the agent (npm start)
+CMD ["node", "scripts/docker-entrypoint.mjs"]

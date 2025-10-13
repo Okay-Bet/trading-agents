@@ -1,9 +1,15 @@
 #!/usr/bin/env node
 
 /**
- * One-time setup script to create agent in database
+ * Database setup script to create agent record
  * This resolves the ElizaOS 1.6.1 foreign key constraint issue
  * where entities.agent_id requires agents.id to exist
+ *
+ * Supports multiple configuration sources:
+ * 1. /app/config.json (SPMC injected config)
+ * 2. agents/<name>/agent-config.json (legacy monorepo)
+ * 3. src/characters/<name>.ts (character registry)
+ * 4. Default character (pamela)
  */
 
 import { PGlite } from '@electric-sql/pglite';
@@ -13,6 +19,97 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+/**
+ * Load agent configuration from available sources
+ */
+function loadAgentConfig() {
+    const AGENT_CHARACTER = process.env.AGENT_CHARACTER || 'pamela';
+
+    // Priority 1: SPMC injected config
+    const spmcConfigPath = process.env.CONFIG_PATH || '/app/config.json';
+    if (existsSync(spmcConfigPath)) {
+        try {
+            const configData = readFileSync(spmcConfigPath, 'utf-8');
+            const config = JSON.parse(configData);
+
+            if (config.character && config.character.id && config.character.name) {
+                console.log(`✓ Loaded config from SPMC: ${spmcConfigPath}`);
+                return {
+                    id: config.character.id || config.agent_id,
+                    name: config.character.name,
+                    system: config.character.system || '',
+                    bio: config.character.bio || [],
+                    messageExamples: config.character.messageExamples || [],
+                    postExamples: config.character.postExamples || [],
+                    topics: config.character.topics || [],
+                    adjectives: config.character.adjectives || [],
+                    knowledge: config.character.knowledge || [],
+                    plugins: config.character.plugins || [],
+                    settings: config.character.settings || {},
+                    style: config.character.style || {}
+                };
+            } else if (config.agent_id) {
+                // SPMC config with just agent_id - fall through to character registry
+                console.log(`✓ Found SPMC config with agent_id: ${config.agent_id}`);
+                process.env.AGENT_ID = config.agent_id; // Set for later use
+            }
+        } catch (error) {
+            console.warn(`Warning: Could not parse SPMC config: ${error.message}`);
+        }
+    }
+
+    // Priority 2: Legacy monorepo config
+    const legacyConfigPath = join(__dirname, `../agents/${AGENT_CHARACTER}/agent-config.json`);
+    if (existsSync(legacyConfigPath)) {
+        try {
+            const configData = readFileSync(legacyConfigPath, 'utf-8');
+            const config = JSON.parse(configData);
+            console.log(`✓ Loaded config from legacy: ${legacyConfigPath}`);
+            return {
+                id: config.id,
+                name: config.name,
+                system: config.system || '',
+                bio: config.bio || [],
+                messageExamples: config.messageExamples || [],
+                postExamples: config.postExamples || [],
+                topics: config.topics || [],
+                adjectives: config.adjectives || [],
+                knowledge: config.knowledge || [],
+                plugins: config.plugins || [],
+                settings: config.settings || {},
+                style: config.style || {}
+            };
+        } catch (error) {
+            console.warn(`Warning: Could not parse legacy config: ${error.message}`);
+        }
+    }
+
+    // Priority 3: Character registry
+    const characterPath = join(__dirname, `../src/characters/${AGENT_CHARACTER}.ts`);
+    if (existsSync(characterPath)) {
+        console.log(`✓ Found character in registry: ${characterPath}`);
+        console.log('⚠ Character registry requires importing - using default structure');
+    }
+
+    // Priority 4: Use defaults as fallback
+    console.log(`⚠ Using default character structure for: ${AGENT_CHARACTER}`);
+    const agentId = process.env.AGENT_ID || '885c8140-1f94-4be4-b553-ab5558b4d800';
+    return {
+        id: agentId,
+        name: AGENT_CHARACTER.charAt(0).toUpperCase() + AGENT_CHARACTER.slice(1),
+        system: `You are ${AGENT_CHARACTER}, a trading agent on Polymarket.`,
+        bio: [`Trading agent ${AGENT_CHARACTER}`],
+        messageExamples: [],
+        postExamples: [],
+        topics: ['prediction markets', 'trading'],
+        adjectives: ['analytical', 'strategic'],
+        knowledge: [],
+        plugins: [],
+        settings: {},
+        style: { all: [], chat: [], post: [] }
+    };
+}
 
 async function setupAgentDatabase() {
     const AGENT_CHARACTER = process.env.AGENT_CHARACTER || 'pamela';
@@ -39,17 +136,10 @@ async function setupAgentDatabase() {
         console.log('✓ Created database directory');
     }
     
-    // Load agent config
-    const configPath = join(__dirname, `../agents/${AGENT_CHARACTER}/agent-config.json`);
-    if (!existsSync(configPath)) {
-        console.error(`✗ No agent config found at ${configPath}`);
-        process.exit(1);
-    }
-    
-    const configData = readFileSync(configPath, 'utf-8');
-    const agentConfig = JSON.parse(configData);
-    
-    console.log(`Loading config for: ${agentConfig.name} (${agentConfig.id})`);
+    // Load agent config from available sources
+    const agentConfig = loadAgentConfig();
+
+    console.log(`Configuring agent: ${agentConfig.name} (${agentConfig.id})`);
     
     try {
         const db = new PGlite(DB_DIR);
