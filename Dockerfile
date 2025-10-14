@@ -29,6 +29,7 @@ ARG AGENT_ID
 ARG AGENT_CHARACTER
 ARG GIT_TAG
 ARG GIT_COMMIT_SHA
+ARG CONFIG_JSON=""
 
 # Store build metadata as environment variables
 ENV AGENT_ID=${AGENT_ID} \
@@ -57,6 +58,17 @@ RUN mkdir -p /app/.eliza/.elizadb
 
 # Create directory for config injection (SPMC will mount config.json here)
 RUN mkdir -p /app/config
+
+# Write CONFIG_JSON to /app/config.json if provided
+# SPMC passes agent config as build arg for immutable deployment
+RUN if [ -n "$CONFIG_JSON" ]; then \
+      echo "$CONFIG_JSON" > /app/config.json && \
+      echo "✓ Config written to /app/config.json" && \
+      echo "Preview (first 3 lines):" && \
+      cat /app/config.json | head -3; \
+    else \
+      echo "⚠ No CONFIG_JSON provided - will use default character or environment config"; \
+    fi
 
 # Set PGLITE data directory
 ENV PGLITE_DATA_DIR=/app/.eliza/.elizadb
