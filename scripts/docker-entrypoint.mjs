@@ -109,6 +109,8 @@ function runDatabaseSetup() {
 /**
  * Run entity cleanup to prevent duplicate key errors
  * This MUST run on every startup, even if database already exists
+ *
+ * CRITICAL: ElizaOS uses character.id as entity.id, not agent_id!
  */
 async function runEntityCleanup() {
     log('═══════════════════════════════════════════════════════', 'magenta');
@@ -119,15 +121,27 @@ async function runEntityCleanup() {
         // Dynamically import the cleanup function
         const { cleanupEntityRecords, loadAgentConfig } = await import('./setup-agent-db.mjs');
 
-        // Load agent config to get the correct agent ID
+        // Load agent config to get the CHARACTER ID (which ElizaOS uses as entity.id)
         const agentConfig = loadAgentConfig();
-        const agentId = agentConfig.id;
+        const characterId = agentConfig.id;  // This is the character ID!
+        const envAgentId = process.env.AGENT_ID;  // This is the agent_id from environment
 
-        log(`Agent ID: ${agentId}`, 'cyan');
+        log(`Character ID (entity.id): ${characterId}`, 'cyan');
+        log(`Agent ID (from env): ${envAgentId || 'not set'}`, 'cyan');
+
+        if (characterId !== envAgentId) {
+            log('⚠ WARNING: Character ID does not match AGENT_ID!', 'yellow');
+            log(`  Character ID: ${characterId}`, 'yellow');
+            log(`  AGENT_ID:     ${envAgentId}`, 'yellow');
+            log('  This may indicate a configuration issue', 'yellow');
+        }
+
         log('Running entity cleanup...', 'cyan');
 
-        // Run cleanup
-        await cleanupEntityRecords(agentId);
+        // Run cleanup with both IDs
+        // characterId is what ElizaOS uses as entity.id
+        // envAgentId is the agent_id reference (may be different)
+        await cleanupEntityRecords(characterId, envAgentId);
 
         log('✓ Entity cleanup completed successfully', 'green');
         return true;

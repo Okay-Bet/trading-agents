@@ -15,53 +15,80 @@ import { getCharacter, pamela as defaultCharacter } from "../characters/index.js
 export async function loadCharacter(): Promise<Character> {
   // Priority 1: Check for SPMC injected config at /app/config.json
   const spmcConfigPath = process.env.CONFIG_PATH || "/app/config.json";
+  console.log(`[CharacterLoader] Checking for SPMC config at: ${spmcConfigPath}`);
+
   if (fs.existsSync(spmcConfigPath)) {
+    console.log(`[CharacterLoader] Found SPMC config file`);
     try {
       const configData = fs.readFileSync(spmcConfigPath, "utf-8");
       const config = JSON.parse(configData);
+      console.log(`[CharacterLoader] Parsed config successfully`);
 
       if (config.character) {
+        console.log(`[CharacterLoader] Config contains character definition`);
+        console.log(`[CharacterLoader] Character ID from config: ${config.character.id}`);
+        console.log(`[CharacterLoader] Character name from config: ${config.character.name}`);
+        const character = buildCharacterFromConfig(config.character);
         console.log(`✓ Loaded character from SPMC config: ${spmcConfigPath}`);
-        return buildCharacterFromConfig(config.character);
+        console.log(`  Final character ID: ${character.id}`);
+        return character;
       }
 
       // Config exists but no character definition - try loading by name
+      console.log(`[CharacterLoader] No character definition in config, checking agent_character field`);
       if (config.agent_character) {
+        console.log(`[CharacterLoader] Found agent_character: ${config.agent_character}`);
         const registryChar = getCharacter(config.agent_character);
         if (registryChar) {
           console.log(`✓ Loaded character '${config.agent_character}' from registry (via SPMC config)`);
+          console.warn(`⚠ WARNING: Using character registry with hardcoded ID: ${registryChar.id}`);
+          console.warn(`⚠ This may not match your AGENT_ID: ${process.env.AGENT_ID}`);
           return registryChar;
         }
+        console.log(`[CharacterLoader] Character '${config.agent_character}' not found in registry`);
       }
     } catch (error) {
-      console.warn(`Failed to load SPMC config from ${spmcConfigPath}:`, error);
+      console.error(`[CharacterLoader] Failed to load SPMC config from ${spmcConfigPath}:`, error);
     }
+  } else {
+    console.log(`[CharacterLoader] SPMC config file not found at ${spmcConfigPath}`);
   }
 
   // Priority 2: Check for agent-specific config (legacy monorepo)
   const agentName = process.env.AGENT_CHARACTER || "pamela";
   const legacyConfigPath = path.join(process.cwd(), "agents", agentName, "agent-config.json");
+  console.log(`[CharacterLoader] Checking legacy config at: ${legacyConfigPath}`);
 
   if (fs.existsSync(legacyConfigPath)) {
+    console.log(`[CharacterLoader] Found legacy config file`);
     try {
       const configData = fs.readFileSync(legacyConfigPath, "utf-8");
       const config = JSON.parse(configData);
       console.log(`✓ Loaded character from legacy config: ${legacyConfigPath}`);
+      console.log(`  Character ID: ${config.id}`);
       return buildCharacterFromConfig(config);
     } catch (error) {
-      console.warn(`Failed to load legacy config from ${legacyConfigPath}:`, error);
+      console.error(`[CharacterLoader] Failed to load legacy config from ${legacyConfigPath}:`, error);
     }
+  } else {
+    console.log(`[CharacterLoader] Legacy config not found`);
   }
 
   // Priority 3: Load from character registry
+  console.log(`[CharacterLoader] Attempting to load '${agentName}' from character registry`);
   const registryChar = getCharacter(agentName);
   if (registryChar) {
     console.log(`✓ Loaded character '${agentName}' from registry`);
+    console.warn(`⚠ WARNING: Using character registry with hardcoded ID: ${registryChar.id}`);
+    console.warn(`⚠ This may not match your AGENT_ID: ${process.env.AGENT_ID}`);
     return registryChar;
   }
+  console.log(`[CharacterLoader] Character '${agentName}' not found in registry`);
 
   // Priority 4: Default to pamela
   console.log(`⚠ No character found for '${agentName}', using default (pamela)`);
+  console.warn(`⚠ WARNING: Using default character with hardcoded ID: ${defaultCharacter.id}`);
+  console.warn(`⚠ This may not match your AGENT_ID: ${process.env.AGENT_ID}`);
   return defaultCharacter;
 }
 
