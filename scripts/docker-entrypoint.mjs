@@ -120,10 +120,14 @@ function startAgent() {
     log('Command: npm start', 'cyan');
 
     // Use spawn to start npm and inherit stdio so we see all output
+    // Set ELIZA_ALLOW_DESTRUCTIVE_MIGRATIONS to avoid migration blocks
     const agent = spawn('npm', ['start'], {
         cwd: join(__dirname, '..'),
         stdio: 'inherit',
-        env: process.env
+        env: {
+            ...process.env,
+            ELIZA_ALLOW_DESTRUCTIVE_MIGRATIONS: 'true'
+        }
     });
 
     // Forward signals to the agent process

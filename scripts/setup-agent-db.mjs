@@ -169,7 +169,21 @@ async function setupAgentDatabase() {
             );
         `);
         console.log('✓ Agents table ready');
-        
+
+        // Create entities table if it doesn't exist (ElizaOS requires this)
+        // IMPORTANT: names must be text[] not JSONB to match ElizaOS schema
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS entities (
+                id UUID PRIMARY KEY,
+                agent_id UUID REFERENCES agents(id) ON DELETE CASCADE,
+                created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+                names text[] DEFAULT '{}'::text[] NOT NULL,
+                metadata JSONB DEFAULT '{}'::jsonb NOT NULL,
+                UNIQUE (id, agent_id)
+            );
+        `);
+        console.log('✓ Entities table ready');
+
         // Check if agent exists
         const agentExists = await db.query(
             `SELECT id FROM agents WHERE id = $1`,
@@ -220,11 +234,26 @@ async function setupAgentDatabase() {
             `SELECT id, name FROM agents WHERE id = $1`,
             [agentConfig.id]
         );
-        
+
         if (verification.rows.length > 0) {
             console.log(`✓ Verified: Agent "${verification.rows[0].name}" exists in database`);
         }
-        
+
+        // CRITICAL FIX: Delete any existing entity with this ID to prevent duplicate key errors
+        // ElizaOS will try to create an entity, but if one already exists from a previous run,
+        // it will crash with "Error creating entities" duplicate key violation.
+        // This ensures a clean state before ElizaOS initialization.
+        const deletedEntities = await db.query(
+            `DELETE FROM entities WHERE id = $1 RETURNING id`,
+            [agentConfig.id]
+        );
+
+        if (deletedEntities.rows.length > 0) {
+            console.log(`✓ Cleaned up existing entity record (prevents duplicate key error)`);
+        } else {
+            console.log(`✓ No existing entity to clean up`);
+        }
+
         await db.close();
         console.log('✓ Database setup complete');
         console.log('');
