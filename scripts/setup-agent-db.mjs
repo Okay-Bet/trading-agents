@@ -21,6 +21,51 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 /**
+ * Clean up existing entity records to prevent duplicate key errors
+ * This must run on EVERY startup, not just during initial DB setup
+ */
+async function cleanupEntityRecords(agentId) {
+    const AGENT_CHARACTER = process.env.AGENT_CHARACTER || 'pamela';
+    const DB_SUFFIX = AGENT_CHARACTER ? `-${AGENT_CHARACTER}` : '';
+    const DB_DIR = process.env.PGLITE_DATA_DIR || join(__dirname, `../.eliza/.elizadb${DB_SUFFIX}`);
+
+    console.log('===========================================');
+    console.log('  Entity Cleanup (Pre-Startup)');
+    console.log('===========================================');
+    console.log(`Agent ID: ${agentId}`);
+    console.log(`Database: ${DB_DIR}`);
+    console.log('');
+
+    try {
+        const db = new PGlite(DB_DIR);
+        await db.ready;
+
+        // CRITICAL: Delete any existing entity with this ID
+        // ElizaOS will try to INSERT entity on startup, causing duplicate key error
+        // if entity from previous run still exists in database
+        const deletedEntities = await db.query(
+            `DELETE FROM entities WHERE id = $1 RETURNING id`,
+            [agentId]
+        );
+
+        if (deletedEntities.rows.length > 0) {
+            console.log(`✓ Cleaned up ${deletedEntities.rows.length} existing entity record(s)`);
+        } else {
+            console.log(`✓ No existing entities found for this agent`);
+        }
+
+        await db.close();
+        console.log('✓ Entity cleanup complete');
+        console.log('');
+        return true;
+    } catch (error) {
+        console.error(`✗ Entity cleanup failed: ${error.message}`);
+        // Don't exit - let agent try to start anyway
+        return false;
+    }
+}
+
+/**
  * Load agent configuration from available sources
  */
 function loadAgentConfig() {
@@ -239,32 +284,26 @@ async function setupAgentDatabase() {
             console.log(`✓ Verified: Agent "${verification.rows[0].name}" exists in database`);
         }
 
-        // CRITICAL FIX: Delete any existing entity with this ID to prevent duplicate key errors
-        // ElizaOS will try to create an entity, but if one already exists from a previous run,
-        // it will crash with "Error creating entities" duplicate key violation.
-        // This ensures a clean state before ElizaOS initialization.
-        const deletedEntities = await db.query(
-            `DELETE FROM entities WHERE id = $1 RETURNING id`,
-            [agentConfig.id]
-        );
-
-        if (deletedEntities.rows.length > 0) {
-            console.log(`✓ Cleaned up existing entity record (prevents duplicate key error)`);
-        } else {
-            console.log(`✓ No existing entity to clean up`);
-        }
-
         await db.close();
         console.log('✓ Database setup complete');
         console.log('');
+
+        // Run entity cleanup to ensure clean state
+        await cleanupEntityRecords(agentConfig.id);
+
         console.log('You can now start your agent with:');
         console.log(`  export AGENT_CHARACTER=${AGENT_CHARACTER} && npm run dev`);
-        
+
     } catch (error) {
         console.error(`✗ Database setup failed: ${error.message}`);
         process.exit(1);
     }
 }
 
-// Run setup
-setupAgentDatabase().catch(console.error);
+// Export functions for use in other scripts
+export { cleanupEntityRecords, loadAgentConfig };
+
+// Run setup if called directly
+if (import.meta.url === `file://${process.argv[1]}`) {
+    setupAgentDatabase().catch(console.error);
+}

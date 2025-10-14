@@ -113,5 +113,26 @@ export function validateCharacter(character: Character): void {
     throw new Error(`Invalid character ID format: ${character.id}. Must be 5 dash-separated segments (e.g., "abc-123-def-456-789")`);
   }
 
-  console.log(`✓ Character validation passed: ${character.name} (${character.id})`);
+  // CRITICAL: Validate that loaded character ID matches AGENT_ID if provided
+  // This prevents using hardcoded character IDs when SPMC provides custom IDs
+  const envAgentId = process.env.AGENT_ID;
+  if (envAgentId && envAgentId !== character.id) {
+    console.warn('═══════════════════════════════════════════════════════');
+    console.warn('  ⚠ WARNING: Character ID Mismatch Detected');
+    console.warn('═══════════════════════════════════════════════════════');
+    console.warn(`Environment AGENT_ID:  ${envAgentId}`);
+    console.warn(`Loaded Character ID:   ${character.id}`);
+    console.warn('');
+    console.warn('This may cause database constraint violations!');
+    console.warn('The agent will use the loaded character ID.');
+    console.warn('═══════════════════════════════════════════════════════');
+  }
+
+  console.log('═══════════════════════════════════════════════════════');
+  console.log(`✓ Character Loaded: ${character.name}`);
+  console.log(`  ID: ${character.id}`);
+  if (envAgentId && envAgentId === character.id) {
+    console.log(`  ✓ Matches AGENT_ID environment variable`);
+  }
+  console.log('═══════════════════════════════════════════════════════');
 }

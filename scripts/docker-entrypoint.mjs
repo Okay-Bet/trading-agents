@@ -107,6 +107,38 @@ function runDatabaseSetup() {
 }
 
 /**
+ * Run entity cleanup to prevent duplicate key errors
+ * This MUST run on every startup, even if database already exists
+ */
+async function runEntityCleanup() {
+    log('═══════════════════════════════════════════════════════', 'magenta');
+    log('  Entity Cleanup (Critical)', 'magenta');
+    log('═══════════════════════════════════════════════════════', 'magenta');
+
+    try {
+        // Dynamically import the cleanup function
+        const { cleanupEntityRecords, loadAgentConfig } = await import('./setup-agent-db.mjs');
+
+        // Load agent config to get the correct agent ID
+        const agentConfig = loadAgentConfig();
+        const agentId = agentConfig.id;
+
+        log(`Agent ID: ${agentId}`, 'cyan');
+        log('Running entity cleanup...', 'cyan');
+
+        // Run cleanup
+        await cleanupEntityRecords(agentId);
+
+        log('✓ Entity cleanup completed successfully', 'green');
+        return true;
+    } catch (error) {
+        log(`✗ Entity cleanup failed: ${error.message}`, 'red');
+        log('Continuing anyway - agent may encounter duplicate key error', 'yellow');
+        return false;
+    }
+}
+
+/**
  * Start the agent application
  */
 function startAgent() {
@@ -180,6 +212,12 @@ async function main() {
         log('✓ Database already initialized', 'green');
         log('', 'reset');
     }
+
+    // CRITICAL: Always run entity cleanup on every startup
+    // This prevents duplicate key errors when container restarts
+    log('Running entity cleanup (required on every startup)...', 'yellow');
+    await runEntityCleanup();
+    log('', 'reset');
 
     // Start the agent
     startAgent();
