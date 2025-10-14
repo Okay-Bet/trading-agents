@@ -38,24 +38,6 @@ ENV AGENT_ID=${AGENT_ID} \
     GIT_COMMIT_SHA=${GIT_COMMIT_SHA} \
     NODE_ENV=production
 
-# CRITICAL: Write CONFIG_JSON immediately after ARG declaration
-# Must happen BEFORE copying files to ensure it's in the final image
-RUN echo "=== CONFIG_JSON Build Arg Processing ===" && \
-    if [ -z "$CONFIG_JSON" ]; then \
-      echo "⚠ WARNING: CONFIG_JSON is empty or not provided"; \
-      echo "Agent will fall back to character registry (hardcoded IDs)"; \
-    else \
-      echo "✓ CONFIG_JSON provided (length: $(echo "$CONFIG_JSON" | wc -c) bytes)"; \
-      printf '%s' "$CONFIG_JSON" > /app/config.json && \
-      echo "✓ Config written to /app/config.json" && \
-      echo "File size: $(stat -c%s /app/config.json 2>/dev/null || stat -f%z /app/config.json) bytes" && \
-      echo "Preview (first 200 chars):" && \
-      head -c 200 /app/config.json && \
-      echo "" && \
-      echo "✓ Verification: File exists at /app/config.json"; \
-    fi && \
-    echo "=== End CONFIG_JSON Processing ==="
-
 # Install runtime dependencies only
 COPY package*.json ./
 RUN npm ci --production --legacy-peer-deps && npm cache clean --force
@@ -74,7 +56,25 @@ COPY tsconfig.json ./
 # Create directory for database
 RUN mkdir -p /app/.eliza/.elizadb
 
-# Verify config.json still exists after all COPY operations
+# CRITICAL FIX: Write CONFIG_JSON AFTER all COPY operations
+# This ensures it's not overwritten by subsequent COPY commands
+RUN echo "=== CONFIG_JSON Build Arg Processing ===" && \
+    if [ -z "$CONFIG_JSON" ]; then \
+      echo "⚠ WARNING: CONFIG_JSON is empty or not provided"; \
+      echo "Agent will fall back to character registry (hardcoded IDs)"; \
+    else \
+      echo "✓ CONFIG_JSON provided (length: $(echo "$CONFIG_JSON" | wc -c) bytes)"; \
+      printf '%s' "$CONFIG_JSON" > /app/config.json && \
+      echo "✓ Config written to /app/config.json" && \
+      echo "File size: $(stat -c%s /app/config.json 2>/dev/null || stat -f%z /app/config.json) bytes" && \
+      echo "Preview (first 200 chars):" && \
+      head -c 200 /app/config.json && \
+      echo "" && \
+      echo "✓ Verification: File exists at /app/config.json"; \
+    fi && \
+    echo "=== End CONFIG_JSON Processing ==="
+
+# Verify config.json still exists
 RUN echo "=== Final Config Verification ===" && \
     if [ -f /app/config.json ]; then \
       echo "✓ Config file exists in final image"; \
