@@ -38,6 +38,24 @@ ENV AGENT_ID=${AGENT_ID} \
     GIT_COMMIT_SHA=${GIT_COMMIT_SHA} \
     NODE_ENV=production
 
+# CRITICAL: Write CONFIG_JSON immediately after ARG declaration
+# Must happen BEFORE copying files to ensure it's in the final image
+RUN echo "=== CONFIG_JSON Build Arg Processing ===" && \
+    if [ -z "$CONFIG_JSON" ]; then \
+      echo "⚠ WARNING: CONFIG_JSON is empty or not provided"; \
+      echo "Agent will fall back to character registry (hardcoded IDs)"; \
+    else \
+      echo "✓ CONFIG_JSON provided (length: $(echo "$CONFIG_JSON" | wc -c) bytes)"; \
+      printf '%s' "$CONFIG_JSON" > /app/config.json && \
+      echo "✓ Config written to /app/config.json" && \
+      echo "File size: $(stat -c%s /app/config.json 2>/dev/null || stat -f%z /app/config.json) bytes" && \
+      echo "Preview (first 200 chars):" && \
+      head -c 200 /app/config.json && \
+      echo "" && \
+      echo "✓ Verification: File exists at /app/config.json"; \
+    fi && \
+    echo "=== End CONFIG_JSON Processing ==="
+
 # Install runtime dependencies only
 COPY package*.json ./
 RUN npm ci --production --legacy-peer-deps && npm cache clean --force
@@ -56,19 +74,15 @@ COPY tsconfig.json ./
 # Create directory for database
 RUN mkdir -p /app/.eliza/.elizadb
 
-# Create directory for config injection (SPMC will mount config.json here)
-RUN mkdir -p /app/config
-
-# Write CONFIG_JSON to /app/config.json if provided
-# SPMC passes agent config as build arg for immutable deployment
-RUN if [ -n "$CONFIG_JSON" ]; then \
-      echo "$CONFIG_JSON" > /app/config.json && \
-      echo "✓ Config written to /app/config.json" && \
-      echo "Preview (first 3 lines):" && \
-      cat /app/config.json | head -3; \
+# Verify config.json still exists after all COPY operations
+RUN echo "=== Final Config Verification ===" && \
+    if [ -f /app/config.json ]; then \
+      echo "✓ Config file exists in final image"; \
+      echo "Size: $(stat -c%s /app/config.json 2>/dev/null || stat -f%z /app/config.json) bytes"; \
     else \
-      echo "⚠ No CONFIG_JSON provided - will use default character or environment config"; \
-    fi
+      echo "⚠ Config file does NOT exist (will use defaults)"; \
+    fi && \
+    echo "=== End Verification ==="
 
 # Set PGLITE data directory
 ENV PGLITE_DATA_DIR=/app/.eliza/.elizadb
