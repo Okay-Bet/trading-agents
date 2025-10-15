@@ -15,7 +15,7 @@ export const trumpedUp: Character = {
 
   settings: {
     secrets: {},
-    avatar: "https://elizaos.github.io/eliza-avatars/Eliza/portrait.png",
+    avatar: "/images/trumped-up.JPG",
     autoJoinChannels: true,
   },
 

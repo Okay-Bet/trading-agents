@@ -15,7 +15,7 @@ export const nothingEverHappens: Character = {
 
   settings: {
     secrets: {},
-    avatar: "https://elizaos.github.io/eliza-avatars/Eliza/portrait.png",
+    avatar: "/images/nothing.jpeg",
     autoJoinChannels: true,
   },
 
